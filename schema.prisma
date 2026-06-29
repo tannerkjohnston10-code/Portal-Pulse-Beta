@@ -1,0 +1,1274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  PUBLIC
+  PREMIUM
+  ADMIN
+  ANALYST
+}
+
+enum PortalStatus {
+  ENTERED
+  AVAILABLE
+  COMMITTED
+  SIGNED
+  ENROLLED
+  WITHDRAWN
+  UNKNOWN
+}
+
+enum MovementType {
+  PORTAL_ENTRY
+  COMMITMENT
+  TRANSFER
+  ENROLLMENT
+  WITHDRAWAL
+  ROSTER_CHANGE
+  UNKNOWN
+}
+
+enum ConfidenceLevel {
+  HIGH
+  MEDIUM
+  LOW
+  CONFLICTING
+  UNKNOWN
+}
+
+enum ClaimStatus {
+  CONFIRMED
+  REPORTED
+  RUMORED
+  ESTIMATED
+  DISPUTED
+  NEEDS_REVIEW
+  UNKNOWN
+}
+
+enum ClaimType {
+  PORTAL_ENTRY
+  COMMITMENT
+  TEAM_INTEREST
+  VISIT
+  NIL_REPORT
+  OFFER
+  ROSTER_CHANGE
+  PREDICTION_UPDATE
+  RANKING_UPDATE
+  COACH_CONNECTION
+  RECRUITING_RELATIONSHIP
+}
+
+enum SubjectType {
+  PLAYER
+  TEAM
+  SCHOOL
+  CONFERENCE
+  COACH
+  NIL_DEAL
+  VISIT
+  PREDICTION
+  RANKING
+  SOURCE
+}
+
+enum SourceType {
+  OFFICIAL_SCHOOL
+  PLAYER_STATEMENT
+  COACH_STATEMENT
+  VERIFIED_REPORTER
+  RECRUITING_SITE
+  NEWS_ARTICLE
+  PODCAST
+  SOCIAL_MEDIA
+  MESSAGE_BOARD
+  UNKNOWN
+}
+
+enum ExtractionStatus {
+  NOT_STARTED
+  QUEUED
+  EXTRACTED
+  NEEDS_REVIEW
+  APPROVED
+  FAILED
+}
+
+enum DuplicateStatus {
+  UNIQUE
+  POSSIBLE_DUPLICATE
+  DUPLICATE
+  UNKNOWN
+}
+
+enum VisitType {
+  OFFICIAL
+  UNOFFICIAL
+  IN_HOME
+  VIRTUAL
+  UNKNOWN
+}
+
+enum VisitStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELED
+  RUMORED
+  UNKNOWN
+}
+
+enum NILStatus {
+  CONFIRMED
+  REPORTED
+  ESTIMATED
+  RUMORED
+  UNKNOWN
+}
+
+enum NILDealType {
+  COLLECTIVE
+  BRAND
+  APPEARANCE
+  SOCIAL
+  AUTOGRAPH
+  UNKNOWN
+}
+
+enum PredictionType {
+  COMMITMENT
+  VISIT
+  NIL
+  ROSTER_FIT
+  TEAM_RANKING
+}
+
+enum TimelineEventType {
+  PORTAL_ENTRY
+  VISIT
+  OFFER
+  TEAM_INTEREST
+  NIL_REPORT
+  COMMITMENT
+  ENROLLMENT
+  WITHDRAWAL
+  RANKING_MOVEMENT
+  PREDICTION_CHANGE
+  SOURCE_UPDATE
+}
+
+enum ReviewStatus {
+  OPEN
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ESCALATED
+  CLOSED
+}
+
+enum AlertType {
+  PLAYER
+  TEAM
+  NIL
+  VISIT
+  RANKING
+  CLAIM
+  SOURCE
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  READ
+}
+
+enum SnapshotType {
+  PLAYER
+  TEAM
+  ROSTER
+  RANKING
+  PREDICTION
+  CLAIM
+}
+
+enum TeamNeedPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum RosterSpotStatus {
+  ACTIVE
+  INJURED
+  REDSHIRT
+  TRANSFERRED
+  GRADUATED
+  UNKNOWN
+}
+
+model User {
+  id                 String            @id @default(uuid()) @db.Uuid
+  email              String            @unique
+  name               String?
+  role               UserRole          @default(PUBLIC)
+  isMock             Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  watchlists         Watchlist[]
+  alerts             Alert[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  assignedReviewItems AdminReviewItem[] @relation("AssignedReviewItems")
+  reviewedReviewItems AdminReviewItem[] @relation("ReviewedReviewItems")
+  reviewedClaims     Claim[]           @relation("ClaimReviewedBy")
+
+  @@index([role])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model Sport {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @unique
+  slug        String    @unique
+  isMock      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  positions   Position[]
+  teams       Team[]
+  players     Player[]
+  rankings    TeamRanking[]
+  playerRankings PlayerRanking[]
+
+  @@index([name])
+}
+
+model Position {
+  id        String   @id @default(uuid()) @db.Uuid
+  sportId   String   @db.Uuid
+  name      String
+  code      String
+  group     String?
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sport     Sport    @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  players   Player[]
+  rosterSpots RosterSpot[]
+  depthChartPositions DepthChartPosition[]
+  teamNeeds TeamNeed[]
+
+  @@unique([sportId, code])
+  @@index([name])
+}
+
+model Conference {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  slug      String   @unique
+  division  String?
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  teams     Team[]
+  schools   School[]
+
+  @@index([name])
+  @@index([division])
+}
+
+model School {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String     @unique
+  city         String?
+  state        String?
+  conferenceId String?    @db.Uuid
+  isMock       Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  conference   Conference? @relation(fields: [conferenceId], references: [id], onDelete: SetNull)
+  teams        Team[]
+  currentPlayers Player[] @relation("CurrentSchool")
+  schoolHistories PlayerSchoolHistory[]
+  portalEntriesFrom TransferPortalEntry[] @relation("PortalFromSchool")
+  portalEntriesTo TransferPortalEntry[] @relation("PortalToSchool")
+  movementsFrom PlayerMovement[] @relation("MovementFromSchool")
+  movementsTo PlayerMovement[] @relation("MovementToSchool")
+  coachTenures CoachTenure[]
+  recruitingRelationships RecruitingRelationship[]
+  scholarshipCounts ScholarshipCount[]
+  nilCollectives NILCollective[]
+
+  @@index([name])
+  @@index([conferenceId])
+}
+
+model HighSchool {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  city      String?
+  state     String?
+  country   String?  @default("USA")
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  players   Player[]
+
+  @@index([name])
+  @@index([state])
+}
+
+model Team {
+  id                  String      @id @default(uuid()) @db.Uuid
+  schoolId            String      @db.Uuid
+  sportId             String      @db.Uuid
+  conferenceId         String?     @db.Uuid
+  name                String
+  slug                String      @unique
+  division            String?
+  portalGains         Int         @default(0)
+  portalLosses        Int         @default(0)
+  nilStrengthEstimate Int?
+  isMock              Boolean     @default(false)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  school              School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  sport               Sport       @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  conference           Conference? @relation(fields: [conferenceId], references: [id], onDelete: SetNull)
+  rosters             Roster[]
+  depthCharts         DepthChart[]
+  teamInterests       TeamInterest[]
+  visits              Visit[]
+  nilDeals            NILDeal[]
+  subjectPredictions  Prediction[] @relation("PredictionSubjectTeam")
+  predictedInPredictions Prediction[] @relation("PredictionPredictedTeam")
+  teamRankings        TeamRanking[]
+  recruitingClasses   RecruitingClass[]
+  scholarshipCounts   ScholarshipCount[]
+  teamNeeds           TeamNeed[]
+  coachTenures        CoachTenure[]
+  timelineEvents      TimelineEvent[]
+  sourceMentions      SourceMention[]
+
+  @@unique([schoolId, sportId])
+  @@index([name])
+  @@index([sportId])
+  @@index([conferenceId])
+  @@index([portalGains])
+  @@index([portalLosses])
+  @@index([updatedAt])
+}
+
+model Player {
+  id                   String        @id @default(uuid()) @db.Uuid
+  sportId              String        @db.Uuid
+  positionId           String?       @db.Uuid
+  highSchoolId          String?       @db.Uuid
+  currentSchoolId       String?       @db.Uuid
+  firstName             String
+  lastName              String
+  displayName           String
+  slug                  String        @unique
+  heightInches          Int?
+  weightPounds          Int?
+  classYear             String?
+  eligibility           String?
+  hometownCity          String?
+  hometownState         String?
+  transferStatus        PortalStatus  @default(UNKNOWN)
+  recruitingRating      Decimal?      @db.Decimal(5, 2)
+  portalRating          Decimal?      @db.Decimal(5, 2)
+  nilValuationStatus    NILStatus     @default(UNKNOWN)
+  profileImageUrl       String?
+  biographySummary      String?
+  isMock                Boolean       @default(false)
+  lastUpdated           DateTime      @default(now())
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  sport                 Sport         @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  position              Position?     @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  highSchool            HighSchool?   @relation(fields: [highSchoolId], references: [id], onDelete: SetNull)
+  currentSchool          School?       @relation("CurrentSchool", fields: [currentSchoolId], references: [id], onDelete: SetNull)
+  schoolHistories       PlayerSchoolHistory[]
+  rosterSpots           RosterSpot[]
+  depthChartPositions   DepthChartPosition[]
+  portalEntries         TransferPortalEntry[]
+  movements             PlayerMovement[]
+  teamInterests         TeamInterest[]
+  visits                Visit[]
+  nilDeals              NILDeal[]
+  nilValuations         NILValuation[]
+  predictions           Prediction[]
+  playerRankings        PlayerRanking[]
+  sourceMentions        SourceMention[]
+  timelineEvents        TimelineEvent[]
+  recruitingRelationships RecruitingRelationship[]
+  recruitingClasses     RecruitingClassPlayer[]
+  teammateEdgesA        PlayerTeammate[] @relation("TeammateA")
+  teammateEdgesB        PlayerTeammate[] @relation("TeammateB")
+
+  @@index([displayName])
+  @@index([lastName, firstName])
+  @@index([sportId])
+  @@index([positionId])
+  @@index([currentSchoolId])
+  @@index([transferStatus])
+  @@index([portalRating])
+  @@index([lastUpdated])
+  @@index([createdAt])
+}
+
+model PlayerSchoolHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  playerId  String   @db.Uuid
+  schoolId  String   @db.Uuid
+  startDate DateTime?
+  endDate   DateTime?
+  season    String?
+  role      String?
+  notes     String?
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([playerId])
+  @@index([schoolId])
+  @@index([season])
+}
+
+model PlayerTeammate {
+  id          String   @id @default(uuid()) @db.Uuid
+  playerAId   String   @db.Uuid
+  playerBId   String   @db.Uuid
+  schoolId    String?  @db.Uuid
+  season      String?
+  relationship String? @default("teammate")
+  isMock      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  playerA     Player   @relation("TeammateA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerB     Player   @relation("TeammateB", fields: [playerBId], references: [id], onDelete: Cascade)
+
+  @@unique([playerAId, playerBId, season])
+  @@index([playerAId])
+  @@index([playerBId])
+}
+
+model Roster {
+  id        String       @id @default(uuid()) @db.Uuid
+  teamId    String       @db.Uuid
+  season    String
+  name      String?
+  isActive  Boolean      @default(true)
+  isMock    Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  team      Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  spots     RosterSpot[]
+
+  @@unique([teamId, season])
+  @@index([season])
+}
+
+model RosterSpot {
+  id          String           @id @default(uuid()) @db.Uuid
+  rosterId    String           @db.Uuid
+  playerId    String           @db.Uuid
+  positionId  String?          @db.Uuid
+  jerseyNumber String?
+  scholarship Boolean?
+  status      RosterSpotStatus @default(UNKNOWN)
+  isMock      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  roster      Roster           @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  player      Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  position    Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
+
+  @@unique([rosterId, playerId])
+  @@index([playerId])
+  @@index([positionId])
+  @@index([status])
+}
+
+model DepthChart {
+  id        String               @id @default(uuid()) @db.Uuid
+  teamId    String               @db.Uuid
+  season    String
+  week      Int?
+  label     String?
+  isCurrent Boolean              @default(false)
+  isMock    Boolean              @default(false)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  team      Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  positions DepthChartPosition[]
+
+  @@index([teamId])
+  @@index([season])
+  @@index([isCurrent])
+}
+
+model DepthChartPosition {
+  id            String      @id @default(uuid()) @db.Uuid
+  depthChartId  String      @db.Uuid
+  positionId    String?     @db.Uuid
+  playerId      String?     @db.Uuid
+  positionLabel String
+  depthOrder    Int
+  status        String?     @default("projected")
+  isMock        Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  depthChart    DepthChart  @relation(fields: [depthChartId], references: [id], onDelete: Cascade)
+  position      Position?   @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  player        Player?     @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@index([depthChartId])
+  @@index([positionId])
+  @@index([playerId])
+  @@index([depthOrder])
+}
+
+model TransferPortalEntry {
+  id             String        @id @default(uuid()) @db.Uuid
+  playerId       String        @db.Uuid
+  fromSchoolId   String?       @db.Uuid
+  toSchoolId     String?       @db.Uuid
+  status         PortalStatus  @default(ENTERED)
+  enteredAt      DateTime
+  committedAt    DateTime?
+  withdrawnAt    DateTime?
+  eligibilityNote String?
+  confidenceScore Int?
+  isMock         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  player         Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  fromSchool      School?      @relation("PortalFromSchool", fields: [fromSchoolId], references: [id], onDelete: SetNull)
+  toSchool        School?      @relation("PortalToSchool", fields: [toSchoolId], references: [id], onDelete: SetNull)
+  interests      TeamInterest[]
+
+  @@index([playerId])
+  @@index([status])
+  @@index([enteredAt])
+  @@index([fromSchoolId])
+  @@index([toSchoolId])
+}
+
+model PlayerMovement {
+  id           String       @id @default(uuid()) @db.Uuid
+  playerId     String       @db.Uuid
+  fromSchoolId String?      @db.Uuid
+  toSchoolId   String?      @db.Uuid
+  movementType MovementType @default(UNKNOWN)
+  occurredAt   DateTime
+  claimId      String?      @db.Uuid
+  notes        String?
+  isMock       Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  fromSchool   School?      @relation("MovementFromSchool", fields: [fromSchoolId], references: [id], onDelete: SetNull)
+  toSchool     School?      @relation("MovementToSchool", fields: [toSchoolId], references: [id], onDelete: SetNull)
+  claim        Claim?       @relation(fields: [claimId], references: [id], onDelete: SetNull)
+
+  @@index([playerId])
+  @@index([movementType])
+  @@index([occurredAt])
+  @@index([fromSchoolId])
+  @@index([toSchoolId])
+}
+
+model TeamInterest {
+  id             String          @id @default(uuid()) @db.Uuid
+  playerId       String          @db.Uuid
+  teamId         String          @db.Uuid
+  portalEntryId  String?         @db.Uuid
+  interestLevel  ConfidenceLevel @default(UNKNOWN)
+  probability    Int?
+  status         ClaimStatus     @default(UNKNOWN)
+  isMock         Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  player         Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team           Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  portalEntry    TransferPortalEntry? @relation(fields: [portalEntryId], references: [id], onDelete: SetNull)
+
+  @@index([playerId])
+  @@index([teamId])
+  @@index([interestLevel])
+  @@index([probability])
+}
+
+model Visit {
+  id              String          @id @default(uuid()) @db.Uuid
+  playerId        String          @db.Uuid
+  teamId          String?         @db.Uuid
+  visitType       VisitType       @default(UNKNOWN)
+  status          VisitStatus     @default(UNKNOWN)
+  visitDate       DateTime?
+  confidenceLevel ConfidenceLevel @default(UNKNOWN)
+  confidenceScore Int?
+  claimId         String?         @db.Uuid
+  isMock          Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  player          Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team            Team?           @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  claim           Claim?          @relation(fields: [claimId], references: [id], onDelete: SetNull)
+
+  @@index([playerId])
+  @@index([teamId])
+  @@index([visitType])
+  @@index([status])
+  @@index([visitDate])
+  @@index([confidenceScore])
+}
+
+model NILCollective {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  schoolId  String?   @db.Uuid
+  isMock    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  school    School?   @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  deals     NILDeal[]
+
+  @@index([name])
+  @@index([schoolId])
+}
+
+model NILDeal {
+  id                    String      @id @default(uuid()) @db.Uuid
+  playerId              String      @db.Uuid
+  teamId                String?     @db.Uuid
+  collectiveId           String?     @db.Uuid
+  status                NILStatus   @default(UNKNOWN)
+  amount                Decimal?    @db.Decimal(14, 2)
+  amountMin             Decimal?    @db.Decimal(14, 2)
+  amountMax             Decimal?    @db.Decimal(14, 2)
+  rangeLabel            String?
+  collectiveName         String?
+  brand                 String?
+  dealType              NILDealType @default(UNKNOWN)
+  sourceId              String?     @db.Uuid
+  confidenceScore       Int?
+  privacyDisclaimerFlag Boolean     @default(true)
+  isMock                Boolean     @default(false)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  player                Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team                  Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  collective            NILCollective? @relation(fields: [collectiveId], references: [id], onDelete: SetNull)
+  source                Source?     @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  valuations            NILValuation[]
+
+  @@index([playerId])
+  @@index([teamId])
+  @@index([status])
+  @@index([confidenceScore])
+  @@index([createdAt])
+}
+
+model NILValuation {
+  id                    String    @id @default(uuid()) @db.Uuid
+  playerId              String    @db.Uuid
+  nilDealId             String?   @db.Uuid
+  status                NILStatus @default(UNKNOWN)
+  amountMin             Decimal?  @db.Decimal(14, 2)
+  amountMax             Decimal?  @db.Decimal(14, 2)
+  valuationLabel        String?
+  methodology           String?
+  confidenceScore       Int?
+  privacyDisclaimerFlag Boolean   @default(true)
+  sourceId              String?   @db.Uuid
+  isMock                Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  player                Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  nilDeal               NILDeal?  @relation(fields: [nilDealId], references: [id], onDelete: SetNull)
+  source                Source?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([playerId])
+  @@index([status])
+  @@index([confidenceScore])
+  @@index([createdAt])
+}
+
+model Prediction {
+  id              String          @id @default(uuid()) @db.Uuid
+  playerId        String?         @db.Uuid
+  teamId          String?         @db.Uuid
+  predictionType  PredictionType
+  predictedTeamId String?         @db.Uuid
+  probability     Int
+  confidenceScore Int?
+  explanation     String?
+  modelVersion    String?
+  sourceInfluence Json?
+  supersededAt    DateTime?
+  isMock          Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  player          Player?         @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team            Team?           @relation("PredictionSubjectTeam", fields: [teamId], references: [id], onDelete: SetNull)
+  predictedTeam    Team?          @relation("PredictionPredictedTeam", fields: [predictedTeamId], references: [id], onDelete: SetNull)
+  history         PredictionHistory[]
+  claims          Claim[]
+
+  @@index([playerId])
+  @@index([teamId])
+  @@index([predictionType])
+  @@index([predictedTeamId])
+  @@index([probability])
+  @@index([confidenceScore])
+  @@index([createdAt])
+  @@index([supersededAt])
+}
+
+model PredictionHistory {
+  id              String     @id @default(uuid()) @db.Uuid
+  predictionId    String     @db.Uuid
+  probability     Int
+  confidenceScore Int?
+  explanation     String?
+  modelVersion    String?
+  sourceInfluence Json?
+  createdAt       DateTime   @default(now())
+  supersededAt    DateTime?
+  isMock          Boolean    @default(false)
+  prediction      Prediction @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+
+  @@index([predictionId])
+  @@index([probability])
+  @@index([createdAt])
+}
+
+model TeamRanking {
+  id                   String    @id @default(uuid()) @db.Uuid
+  teamId               String    @db.Uuid
+  sportId              String    @db.Uuid
+  sourceId             String?   @db.Uuid
+  rankingType          String
+  season               String?
+  rank                 Int
+  previousRank         Int?
+  rankingScore         Decimal?  @db.Decimal(8, 3)
+  portalGrade          String?
+  commits              Int       @default(0)
+  losses               Int       @default(0)
+  projectedImpactScore Int?
+  isMock               Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  team                 Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sport                Sport     @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  source               Source?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
+  @@index([sportId])
+  @@index([rankingType])
+  @@index([rank])
+  @@index([rankingScore])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model PlayerRanking {
+  id           String    @id @default(uuid()) @db.Uuid
+  playerId     String    @db.Uuid
+  sportId      String    @db.Uuid
+  sourceId     String?   @db.Uuid
+  rankingType  String
+  season       String?
+  rank         Int?
+  rankingScore Decimal?  @db.Decimal(8, 3)
+  stars        Int?
+  isMock       Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  player       Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  sport        Sport     @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  source       Source?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([playerId])
+  @@index([sportId])
+  @@index([rankingType])
+  @@index([rank])
+  @@index([rankingScore])
+  @@index([createdAt])
+}
+
+model Source {
+  id                String            @id @default(uuid()) @db.Uuid
+  name              String
+  url               String
+  type              SourceType        @default(UNKNOWN)
+  author            String?
+  publisher         String?
+  publishedAt       DateTime?
+  retrievedAt       DateTime?
+  reliabilityScore  Int?
+  paywalled         Boolean           @default(false)
+  contentSummary    String?
+  citationText      String?
+  extractionStatus  ExtractionStatus  @default(NOT_STARTED)
+  duplicateStatus   DuplicateStatus   @default(UNKNOWN)
+  isMock            Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  articles          SourceArticle[]
+  claimSources      ClaimSource[]
+  sourceMentions    SourceMention[]
+  nilDeals          NILDeal[]
+  nilValuations     NILValuation[]
+  teamRankings      TeamRanking[]
+  playerRankings    PlayerRanking[]
+  recruitingRelationships RecruitingRelationship[]
+  historicalSnapshots HistoricalSnapshot[]
+
+  @@index([name])
+  @@index([url])
+  @@index([type])
+  @@index([reliabilityScore])
+  @@index([publishedAt])
+  @@index([retrievedAt])
+  @@index([createdAt])
+}
+
+model SourceArticle {
+  id               String            @id @default(uuid()) @db.Uuid
+  sourceId         String            @db.Uuid
+  title            String?
+  canonicalUrl     String?
+  rawText          String?
+  contentHash      String?
+  publishedAt      DateTime?
+  retrievedAt      DateTime?
+  extractionStatus ExtractionStatus  @default(NOT_STARTED)
+  duplicateStatus  DuplicateStatus   @default(UNKNOWN)
+  isMock           Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  source           Source            @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  mentions         SourceMention[]
+  claimSources     ClaimSource[]
+
+  @@index([sourceId])
+  @@index([canonicalUrl])
+  @@index([contentHash])
+  @@index([publishedAt])
+  @@index([retrievedAt])
+}
+
+model SourceMention {
+  id              String        @id @default(uuid()) @db.Uuid
+  sourceId         String?       @db.Uuid
+  sourceArticleId  String?       @db.Uuid
+  playerId         String?       @db.Uuid
+  teamId           String?       @db.Uuid
+  coachId          String?       @db.Uuid
+  mentionText      String
+  mentionType      SubjectType   @default(SOURCE)
+  confidenceScore  Int?
+  isMock           Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  source           Source?       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceArticle    SourceArticle? @relation(fields: [sourceArticleId], references: [id], onDelete: Cascade)
+  player           Player?       @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  team             Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  coach            Coach?        @relation(fields: [coachId], references: [id], onDelete: SetNull)
+
+  @@index([sourceId])
+  @@index([sourceArticleId])
+  @@index([playerId])
+  @@index([teamId])
+  @@index([coachId])
+  @@index([mentionType])
+  @@index([confidenceScore])
+}
+
+model Claim {
+  id              String          @id @default(uuid()) @db.Uuid
+  claimType       ClaimType
+  subjectType     SubjectType
+  subjectId       String
+  value           String
+  status          ClaimStatus     @default(UNKNOWN)
+  confidenceLevel ConfidenceLevel @default(UNKNOWN)
+  confidenceScore Int?
+  firstSeenAt     DateTime
+  lastSeenAt      DateTime
+  reviewedStatus  ReviewStatus    @default(OPEN)
+  reviewedById    String?         @db.Uuid
+  reviewedAt      DateTime?
+  reviewNotes     String?
+  predictionId    String?         @db.Uuid
+  isMock          Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  reviewedBy      User?           @relation("ClaimReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  prediction      Prediction?     @relation(fields: [predictionId], references: [id], onDelete: SetNull)
+  claimSources    ClaimSource[]
+  conflictsAsPrimary ClaimConflict[] @relation("PrimaryClaimConflict")
+  conflictsAsConflicting ClaimConflict[] @relation("ConflictingClaimConflict")
+  reviewItems     AdminReviewItem[]
+  timelineEvents  TimelineEvent[]
+  visits          Visit[]
+  movements       PlayerMovement[]
+
+  @@index([claimType])
+  @@index([subjectType, subjectId])
+  @@index([status])
+  @@index([confidenceLevel])
+  @@index([confidenceScore])
+  @@index([firstSeenAt])
+  @@index([lastSeenAt])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ClaimSource {
+  id              String        @id @default(uuid()) @db.Uuid
+  claimId          String        @db.Uuid
+  sourceId         String        @db.Uuid
+  sourceArticleId  String?       @db.Uuid
+  citationText     String?
+  supporting       Boolean       @default(true)
+  confidenceWeight Decimal?      @db.Decimal(5, 2)
+  isMock           Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  claim            Claim         @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  source           Source        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceArticle    SourceArticle? @relation(fields: [sourceArticleId], references: [id], onDelete: SetNull)
+
+  @@unique([claimId, sourceId, sourceArticleId])
+  @@index([claimId])
+  @@index([sourceId])
+  @@index([supporting])
+}
+
+model ClaimConflict {
+  id                 String      @id @default(uuid()) @db.Uuid
+  primaryClaimId      String      @db.Uuid
+  conflictingClaimId  String      @db.Uuid
+  reason             String?
+  status             ReviewStatus @default(OPEN)
+  resolvedAt         DateTime?
+  isMock             Boolean     @default(false)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  primaryClaim       Claim       @relation("PrimaryClaimConflict", fields: [primaryClaimId], references: [id], onDelete: Cascade)
+  conflictingClaim   Claim       @relation("ConflictingClaimConflict", fields: [conflictingClaimId], references: [id], onDelete: Cascade)
+
+  @@unique([primaryClaimId, conflictingClaimId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AdminReviewItem {
+  id            String       @id @default(uuid()) @db.Uuid
+  claimId        String?      @db.Uuid
+  assignedToId   String?      @db.Uuid
+  reviewedById   String?      @db.Uuid
+  category      String
+  priority      String
+  status        ReviewStatus @default(OPEN)
+  notes         String?
+  isMock        Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  reviewedAt    DateTime?
+  claim         Claim?       @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  assignedTo    User?        @relation("AssignedReviewItems", fields: [assignedToId], references: [id], onDelete: SetNull)
+  reviewedBy    User?        @relation("ReviewedReviewItems", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([claimId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  action    String
+  entityType String
+  entityId  String
+  metadata  Json?
+  ipAddress String?
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Watchlist {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  name      String
+  isDefault Boolean  @default(false)
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alerts    Alert[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Alert {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  watchlistId String?   @db.Uuid
+  alertType   AlertType
+  subjectType SubjectType
+  subjectId   String
+  threshold   Json?
+  enabled     Boolean   @default(true)
+  isMock      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  watchlist   Watchlist? @relation(fields: [watchlistId], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  @@index([userId])
+  @@index([alertType])
+  @@index([subjectType, subjectId])
+  @@index([enabled])
+}
+
+model Notification {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @db.Uuid
+  alertId   String?             @db.Uuid
+  channel   NotificationChannel
+  status    NotificationStatus  @default(QUEUED)
+  title     String
+  body      String
+  sentAt    DateTime?
+  readAt    DateTime?
+  isMock    Boolean             @default(false)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alert     Alert?              @relation(fields: [alertId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([alertId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TimelineEvent {
+  id           String            @id @default(uuid()) @db.Uuid
+  eventType    TimelineEventType
+  subjectType  SubjectType
+  subjectId    String
+  playerId     String?           @db.Uuid
+  teamId       String?           @db.Uuid
+  claimId      String?           @db.Uuid
+  title        String
+  detail       String?
+  occurredAt   DateTime
+  confidenceLevel ConfidenceLevel @default(UNKNOWN)
+  isMock       Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  player       Player?           @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team         Team?             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  claim        Claim?            @relation(fields: [claimId], references: [id], onDelete: SetNull)
+
+  @@index([eventType])
+  @@index([subjectType, subjectId])
+  @@index([playerId])
+  @@index([teamId])
+  @@index([occurredAt])
+  @@index([createdAt])
+}
+
+model RecruitingRelationship {
+  id        String   @id @default(uuid()) @db.Uuid
+  playerId  String   @db.Uuid
+  coachId   String?  @db.Uuid
+  schoolId  String?  @db.Uuid
+  relationshipType String
+  strengthScore Int?
+  sourceId  String?  @db.Uuid
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  coach     Coach?   @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  school    School?  @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  source    Source?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([playerId])
+  @@index([coachId])
+  @@index([schoolId])
+  @@index([relationshipType])
+  @@index([strengthScore])
+}
+
+model Coach {
+  id        String   @id @default(uuid()) @db.Uuid
+  firstName String
+  lastName  String
+  displayName String
+  slug      String   @unique
+  role      String?
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenures   CoachTenure[]
+  recruitingRelationships RecruitingRelationship[]
+  sourceMentions SourceMention[]
+
+  @@index([displayName])
+  @@index([lastName, firstName])
+}
+
+model CoachTenure {
+  id        String   @id @default(uuid()) @db.Uuid
+  coachId   String   @db.Uuid
+  schoolId  String   @db.Uuid
+  teamId    String?  @db.Uuid
+  title     String
+  startDate DateTime?
+  endDate   DateTime?
+  isCurrent Boolean  @default(false)
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  coach     Coach    @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([coachId])
+  @@index([schoolId])
+  @@index([teamId])
+  @@index([isCurrent])
+}
+
+model RecruitingClass {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @db.Uuid
+  year      Int
+  label     String?
+  ranking   Int?
+  score     Decimal? @db.Decimal(8, 3)
+  isMock    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  players   RecruitingClassPlayer[]
+
+  @@unique([teamId, year])
+  @@index([year])
+  @@index([ranking])
+  @@index([score])
+}
+
+model RecruitingClassPlayer {
+  id                String          @id @default(uuid()) @db.Uuid
+  recruitingClassId String          @db.Uuid
+  playerId          String          @db.Uuid
+  status            ClaimStatus     @default(UNKNOWN)
+  rating            Decimal?        @db.Decimal(5, 2)
+  isMock            Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  recruitingClass   RecruitingClass @relation(fields: [recruitingClassId], references: [id], onDelete: Cascade)
+  player            Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([recruitingClassId, playerId])
+  @@index([playerId])
+  @@index([status])
+}
+
+model ScholarshipCount {
+  id             String   @id @default(uuid()) @db.Uuid
+  schoolId        String   @db.Uuid
+  teamId          String?  @db.Uuid
+  season          String
+  totalAllowed    Int?
+  totalUsed       Int?
+  projectedOpen   Int?
+  isMock          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  team            Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@unique([schoolId, teamId, season])
+  @@index([season])
+  @@index([totalUsed])
+  @@index([projectedOpen])
+}
+
+model TeamNeed {
+  id          String           @id @default(uuid()) @db.Uuid
+  teamId      String           @db.Uuid
+  positionId  String?          @db.Uuid
+  season      String?
+  priority    TeamNeedPriority @default(MEDIUM)
+  needScore   Int?
+  notes       String?
+  isMock      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  team        Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  position    Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
+  @@index([positionId])
+  @@index([priority])
+  @@index([needScore])
+}
+
+model HistoricalSnapshot {
+  id          String       @id @default(uuid()) @db.Uuid
+  snapshotType SnapshotType
+  subjectType SubjectType
+  subjectId   String
+  snapshotDate DateTime    @default(now())
+  data        Json
+  sourceId    String?      @db.Uuid
+  isMock      Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  source      Source?      @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([snapshotType])
+  @@index([subjectType, subjectId])
+  @@index([snapshotDate])
+  @@index([createdAt])
+}
